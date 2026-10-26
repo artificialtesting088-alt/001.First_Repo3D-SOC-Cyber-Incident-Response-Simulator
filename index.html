@@ -1,0 +1,2257 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>CYBEROPS 3D — Simulasi SOC & Incident Response</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js r128 CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Google Fonts: JetBrains Mono & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-dark: #050811;
+      --panel-bg: rgba(10, 17, 32, 0.88);
+      --cyan-glow: #00f3ff;
+      --purple-glow: #b829ff;
+      --blue-glow: #3b82f6;
+      --orange-glow: #f97316;
+      --green-glow: #10b981;
+      --red-glow: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-dark);
+      font-family: 'Inter', sans-serif;
+      color: #e2e8f0;
+    }
+
+    .font-mono-tech {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    /* Glassmorphism Cyber Panels */
+    .cyber-panel {
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(56, 189, 248, 0.22);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .cyber-panel-danger {
+      background: rgba(28, 10, 18, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(239, 68, 68, 0.55);
+      box-shadow: 0 0 25px rgba(239, 68, 68, 0.25);
+    }
+
+    /* Scanline Overlay */
+    .scanlines {
+      background: linear-gradient(
+        to bottom,
+        rgba(255,255,255,0),
+        rgba(255,255,255,0) 50%,
+        rgba(0, 243, 255, 0.02) 50%,
+        rgba(0, 243, 255, 0.02)
+      );
+      background-size: 100% 4px;
+      pointer-events: none;
+    }
+
+    /* 3D Floating Station Labels */
+    .station-label {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      pointer-events: auto;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.2s ease;
+      z-index: 10;
+    }
+    .station-label:hover {
+      transform: translate(-50%, -105%) scale(1.05);
+    }
+
+    @keyframes pulse-alert {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8), 0 0 20px rgba(239, 68, 68, 0.6);
+        border-color: #ef4444;
+      }
+      50% {
+        box-shadow: 0 0 0 10px rgba(239, 68, 68, 0), 0 0 30px rgba(239, 68, 68, 0.95);
+        border-color: #fca5a5;
+      }
+    }
+
+    .alert-ring {
+      animation: pulse-alert 1.2s infinite;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(56, 189, 248, 0.4);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(56, 189, 248, 0.7);
+    }
+  </style>
+</head>
+<body class="relative select-none">
+
+  <!-- 3D WebGL Canvas Container -->
+  <div id="canvas-container"></div>
+
+  <!-- Subtle CRT Scanlines -->
+  <div class="scanlines fixed inset-0 z-10 pointer-events-none"></div>
+
+  <!-- Floating 3D Labels Container -->
+  <div id="labels-container" class="fixed inset-0 pointer-events-none z-20 overflow-hidden"></div>
+
+  <!-- TOP HUD BAR -->
+  <header class="fixed top-0 left-0 right-0 z-30 p-2 sm:p-3 pointer-events-none">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      
+      <!-- Brand & Status -->
+      <div class="cyber-panel rounded-xl px-3.5 py-2 pointer-events-auto flex items-center gap-3">
+        <div class="relative flex items-center justify-center w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-400/40">
+          <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+          <span id="soc-status-dot" class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+          <span id="soc-status-dot-solid" class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-bold text-xs sm:text-sm tracking-wider text-white uppercase">CYBEROPS 3D</h1>
+            <span id="soc-threat-badge" class="text-[10px] font-mono-tech font-semibold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">DEFCON 5: AMAN</span>
+          </div>
+          <p class="text-[11px] text-slate-400 hidden sm:block">SOC Tactical Incident Response Simulator</p>
+        </div>
+      </div>
+
+      <!-- Network Integrity & Metrics Bar -->
+      <div class="cyber-panel rounded-xl px-3.5 py-2 pointer-events-auto flex items-center gap-4 sm:gap-6 flex-1 max-w-xl">
+        <!-- Integrity Meter -->
+        <div class="flex-1 min-w-[120px]">
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="font-semibold text-slate-300 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+              Integritas Jaringan
+            </span>
+            <span id="health-value" class="font-mono-tech font-bold text-emerald-400">100%</span>
+          </div>
+          <div class="w-full h-2.5 bg-slate-800/90 rounded-full overflow-hidden border border-slate-700">
+            <div id="health-bar" class="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-300" style="width: 100%"></div>
+          </div>
+        </div>
+
+        <!-- MTTD / MTTR / Score -->
+        <div class="hidden md:flex items-center gap-4 border-l border-slate-700/80 pl-4 font-mono-tech">
+          <div>
+            <div class="text-[10px] text-slate-400 uppercase">MTTD Rata2</div>
+            <div id="hud-mttd" class="text-xs font-bold text-cyan-300">-- dtk</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400 uppercase">MTTR Rata2</div>
+            <div id="hud-mttr" class="text-xs font-bold text-purple-300">-- dtk</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400 uppercase">Skor SOC</div>
+            <div id="hud-score" class="text-xs font-bold text-amber-300">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top Right Controls -->
+      <div class="cyber-panel rounded-xl p-1.5 pointer-events-auto flex items-center gap-1.5">
+        <button id="btn-camera-mode" onclick="toggleCameraMode()" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800/90 hover:bg-cyan-500/20 text-slate-200 hover:text-cyan-300 border border-slate-700/80 transition flex items-center gap-1.5" title="Ganti Sudut Kamera (V)">
+          <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+          </svg>
+          <span id="camera-mode-label" class="hidden sm:inline">Kamera: Isometrik</span>
+        </button>
+
+        <button id="btn-sound" onclick="toggleSound()" class="p-1.5 rounded-lg text-xs bg-slate-800/90 hover:bg-cyan-500/20 text-cyan-400 border border-slate-700/80 transition" title="Suara Efek (M)">
+          <svg id="icon-sound-on" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+          </svg>
+          <svg id="icon-sound-off" class="w-4 h-4 hidden text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
+          </svg>
+        </button>
+
+        <button onclick="openScoreboardModal()" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800/90 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 transition flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          <span class="hidden sm:inline">Laporan</span>
+        </button>
+
+        <button onclick="openHelpModal()" class="p-1.5 rounded-lg text-xs bg-slate-800/90 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition" title="Panduan Playbook">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- LEFT SIDEBAR: ACTIVE INCIDENT PLAYBOOK & IOC SCRATCHPAD -->
+  <aside class="fixed top-16 sm:top-20 left-2 sm:left-3 z-30 w-72 sm:w-80 pointer-events-none flex flex-col gap-2.5 max-h-[calc(100vh-170px)]">
+    
+    <!-- Active Incident Card -->
+    <div id="incident-card" class="cyber-panel rounded-xl p-3.5 pointer-events-auto transition-all duration-300">
+      <div class="flex items-center justify-between border-b border-slate-700/80 pb-2 mb-2.5">
+        <div class="flex items-center gap-2">
+          <span id="incident-indicator" class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200">Antrean Insiden Aktif</h2>
+        </div>
+        <span id="incident-timer" class="font-mono-tech text-xs text-slate-400">00:00</span>
+      </div>
+
+      <!-- Empty State -->
+      <div id="no-incident-view" class="py-3 text-center">
+        <p class="text-xs text-slate-400 mb-2">Tidak ada anomali aktif. Pantau konsol atau picu simulasi serangan dari panel <strong class="text-rose-400">Red Team Injector</strong>.</p>
+        <button onclick="triggerRandomScenario()" class="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 text-white font-semibold text-xs shadow-lg shadow-rose-600/25 transition flex items-center justify-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+          Simulasikan Serangan Baru
+        </button>
+      </div>
+
+      <!-- Active Incident Detail View -->
+      <div id="active-incident-view" class="hidden space-y-2.5">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <span id="inc-severity" class="text-[10px] font-mono-tech font-bold uppercase px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">CRITICAL</span>
+            <h3 id="inc-title" class="text-sm font-bold text-white mt-1">Spear Phishing & Reverse Shell</h3>
+          </div>
+        </div>
+        <p id="inc-desc" class="text-xs text-slate-300 leading-relaxed"></p>
+
+        <!-- Playbook Step Progress -->
+        <div class="bg-slate-900/90 rounded-lg p-2.5 border border-slate-800 space-y-2">
+          <div class="text-[10px] font-mono-tech uppercase tracking-wider text-cyan-400 font-semibold">Tahapan Incident Response Playbook:</div>
+          <div id="playbook-steps-list" class="space-y-1.5 text-xs"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collected IOC Scratchpad -->
+    <div id="ioc-scratchpad" class="cyber-panel rounded-xl p-3 pointer-events-auto hidden">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+          </svg>
+          Catatan IOC (Hasil Triage)
+        </span>
+        <span class="text-[10px] font-mono-tech text-slate-400">Auto-Sync</span>
+      </div>
+      <div id="ioc-badges-list" class="grid grid-cols-1 gap-1.5 font-mono-tech text-[11px]"></div>
+    </div>
+
+  </aside>
+
+  <!-- RIGHT SIDEBAR: RED TEAM INJECTOR & QUICK TELEPORT -->
+  <aside class="fixed top-16 sm:top-20 right-2 sm:right-3 z-30 w-64 sm:w-72 pointer-events-none flex flex-col gap-2.5">
+    <div class="cyber-panel rounded-xl p-3 pointer-events-auto">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+          <h2 class="text-xs font-bold uppercase tracking-wider text-rose-300">Red Team Injector</h2>
+        </div>
+        <button id="btn-wave-toggle" onclick="toggleWaveMode()" class="text-[10px] font-mono-tech px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 transition">
+          Auto-Wave: OFF
+        </button>
+      </div>
+
+      <p class="text-[11px] text-slate-400 mb-2">Pilih skenario serangan untuk menguji kesigapan SOC:</p>
+
+      <div class="space-y-1.5">
+        <button onclick="startScenario(0)" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-rose-950/60 border border-slate-800 hover:border-rose-500/50 transition flex items-center justify-between group">
+          <div>
+            <div class="text-xs font-semibold text-slate-200 group-hover:text-rose-300">1. Phishing & Reverse Shell</div>
+            <div class="text-[10px] font-mono-tech text-slate-400">SIEM ➔ EDR ➔ Firewall</div>
+          </div>
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono-tech">3 Step</span>
+        </button>
+
+        <button onclick="startScenario(1)" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-rose-950/60 border border-slate-800 hover:border-rose-500/50 transition flex items-center justify-between group">
+          <div>
+            <div class="text-xs font-semibold text-slate-200 group-hover:text-rose-300">2. SSH/RDP Brute Force</div>
+            <div class="text-[10px] font-mono-tech text-slate-400">SIEM ➔ Threat Intel ➔ FW</div>
+          </div>
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono-tech">3 Step</span>
+        </button>
+
+        <button onclick="startScenario(2)" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-rose-950/60 border border-slate-800 hover:border-rose-500/50 transition flex items-center justify-between group">
+          <div>
+            <div class="text-xs font-semibold text-slate-200 group-hover:text-rose-300">3. LockBit Ransomware</div>
+            <div class="text-[10px] font-mono-tech text-slate-400">SIEM ➔ EDR ➔ Server Rack</div>
+          </div>
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono-tech">3 Step</span>
+        </button>
+
+        <button onclick="startScenario(3)" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-rose-950/60 border border-slate-800 hover:border-rose-500/50 transition flex items-center justify-between group">
+          <div>
+            <div class="text-xs font-semibold text-slate-200 group-hover:text-rose-300">4. Zero-Day SQLi Exfil</div>
+            <div class="text-[10px] font-mono-tech text-slate-400">SIEM ➔ Firewall ➔ Server</div>
+          </div>
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono-tech">3 Step</span>
+        </button>
+      </div>
+
+      <!-- Quick Walk Navigation -->
+      <div class="mt-3 pt-2.5 border-t border-slate-800">
+        <div class="text-[10px] font-mono-tech uppercase text-slate-400 mb-1.5">Navigasi Cepat (Auto-Lari):</div>
+        <div class="grid grid-cols-5 gap-1">
+          <button onclick="walkToStation('siem')" class="py-1 px-1 rounded bg-cyan-500/15 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] font-mono-tech font-bold text-center transition" title="Lari ke SIEM Console">SIEM</button>
+          <button onclick="walkToStation('ti')" class="py-1 px-1 rounded bg-purple-500/15 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] font-mono-tech font-bold text-center transition" title="Lari ke Threat Intel">INTEL</button>
+          <button onclick="walkToStation('edr')" class="py-1 px-1 rounded bg-blue-500/15 hover:bg-blue-500/30 border border-blue-500/40 text-blue-300 text-[10px] font-mono-tech font-bold text-center transition" title="Lari ke EDR Workstation">EDR</button>
+          <button onclick="walkToStation('fw')" class="py-1 px-1 rounded bg-orange-500/15 hover:bg-orange-500/30 border border-orange-500/40 text-orange-300 text-[10px] font-mono-tech font-bold text-center transition" title="Lari ke Firewall & NAC">FW</button>
+          <button onclick="walkToStation('srv')" class="py-1 px-1 rounded bg-emerald-500/15 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-[10px] font-mono-tech font-bold text-center transition" title="Lari ke Core Server Rack">SRV</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- PROXIMITY INTERACTION PROMPT (CENTER BOTTOM) -->
+  <div id="proximity-prompt" class="fixed bottom-24 sm:bottom-10 left-1/2 -translate-x-1/2 z-30 pointer-events-auto hidden">
+    <button id="proximity-btn" onclick="openNearbyStationModal()" class="px-5 py-3 rounded-2xl bg-slate-900/95 hover:bg-slate-800 border-2 border-cyan-400 shadow-[0_0_30px_rgba(0,243,255,0.4)] transition transform hover:scale-105 flex items-center gap-3">
+      <span class="px-2.5 py-1 rounded-lg bg-cyan-400 text-slate-950 font-mono-tech font-extrabold text-xs">E / SPASI</span>
+      <div class="text-left">
+        <div class="text-[10px] font-mono-tech uppercase tracking-wider text-cyan-300">Stasiun Dalam Jangkauan</div>
+        <div id="proximity-station-name" class="text-sm font-bold text-white">Buka Terminal SIEM Console</div>
+      </div>
+    </button>
+  </div>
+
+  <!-- TOAST NOTIFICATION BANNER -->
+  <div id="toast-container" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex flex-col items-center gap-2 w-full max-w-md px-4"></div>
+
+  <!-- BOTTOM CONTROLS: D-PAD FOR MOBILE / TOUCH & KEYBOARD HINT -->
+  <div class="fixed bottom-3 left-3 z-30 pointer-events-auto flex items-end gap-3">
+    <!-- On-Screen D-Pad -->
+    <div class="cyber-panel rounded-2xl p-2 grid grid-cols-3 gap-1 w-28 h-28 sm:w-32 sm:h-32">
+      <div></div>
+      <button id="dpad-up" class="rounded-lg bg-slate-800/90 active:bg-cyan-500/40 border border-slate-700 flex items-center justify-center text-cyan-300 font-bold text-sm">W</button>
+      <div></div>
+      <button id="dpad-left" class="rounded-lg bg-slate-800/90 active:bg-cyan-500/40 border border-slate-700 flex items-center justify-center text-cyan-300 font-bold text-sm">A</button>
+      <button onclick="openNearbyStationModal()" class="rounded-lg bg-cyan-500/20 active:bg-cyan-500/50 border border-cyan-500/40 flex items-center justify-center text-cyan-300 font-mono-tech font-bold text-xs">E</button>
+      <button id="dpad-right" class="rounded-lg bg-slate-800/90 active:bg-cyan-500/40 border border-slate-700 flex items-center justify-center text-cyan-300 font-bold text-sm">D</button>
+      <div></div>
+      <button id="dpad-down" class="rounded-lg bg-slate-800/90 active:bg-cyan-500/40 border border-slate-700 flex items-center justify-center text-cyan-300 font-bold text-sm">S</button>
+      <div></div>
+    </div>
+
+    <div class="cyber-panel rounded-xl px-3 py-2 hidden lg:block text-[11px] text-slate-400">
+      <div><strong class="text-slate-200 font-mono-tech">[W,A,S,D / Panah]</strong> Lari ke Stasiun SOC</div>
+      <div><strong class="text-cyan-300 font-mono-tech">[E / Spasi]</strong> Buka Terminal &bull; <strong class="text-slate-200 font-mono-tech">[Klik Lantai/Label]</strong> Auto-Jalan</div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- INTERACTIVE STATION TERMINAL MODAL -->
+  <!-- =================================================================== -->
+  <div id="station-modal-backdrop" class="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-2 sm:p-4">
+    <div class="cyber-panel rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden border border-cyan-500/40 shadow-2xl">
+      
+      <!-- Modal Header -->
+      <div id="modal-header-bar" class="px-4 py-3 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="flex gap-1.5">
+            <span class="w-3 h-3 rounded-full bg-rose-500"></span>
+            <span class="w-3 h-3 rounded-full bg-amber-400"></span>
+            <span class="w-3 h-3 rounded-full bg-emerald-400"></span>
+          </div>
+          <div>
+            <h2 id="modal-station-title" class="font-mono-tech font-bold text-sm sm:text-base text-white">SIEM CONSOLE</h2>
+            <p id="modal-station-subtitle" class="text-[11px] text-slate-400">Security Information & Event Management</p>
+          </div>
+        </div>
+        <button onclick="closeStationModal()" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-300 hover:text-rose-300 border border-slate-700 font-mono-tech text-xs transition">
+          TUTUP [ESC]
+        </button>
+      </div>
+
+      <!-- Modal Dynamic Body -->
+      <div id="modal-station-body" class="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1"></div>
+
+      <!-- Interactive CLI Command Bar at Bottom of Station -->
+      <div class="px-4 py-2.5 bg-slate-950 border-t border-slate-800 flex items-center gap-2 font-mono-tech text-xs">
+        <span class="text-cyan-400 font-bold">analyst@soc-core:~$</span>
+        <input id="cli-input" type="text" placeholder="Ketik perintah cepat (misal: help, triage, isolate, block, patch) atau gunakan tombol GUI di atas..." class="bg-transparent text-slate-100 focus:outline-none flex-1" onkeydown="if(event.key==='Enter') executeCliCommand()" />
+        <button onclick="executeCliCommand()" class="px-3 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-semibold">RUN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- POST-INCIDENT REPORT & SCOREBOARD MODAL -->
+  <!-- =================================================================== -->
+  <div id="scoreboard-modal" class="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-3 sm:p-4">
+    <div class="cyber-panel rounded-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden border border-purple-500/40">
+      <div class="px-5 py-3.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 class="font-bold text-base text-white">Laporan Post-Incident & Statistik SOC</h2>
+          <p class="text-xs text-slate-400">Data tersimpan secara lokal di browser (`localStorage`) untuk GitHub Pages</p>
+        </div>
+        <button onclick="closeScoreboardModal()" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono-tech text-slate-300">TUTUP</button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-4">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono-tech">
+          <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
+            <div class="text-[10px] text-slate-400 uppercase">Total Skor</div>
+            <div id="stat-total-score" class="text-xl font-bold text-amber-400 mt-1">0</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
+            <div class="text-[10px] text-slate-400 uppercase">Insiden Selesai</div>
+            <div id="stat-resolved-count" class="text-xl font-bold text-emerald-400 mt-1">0</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
+            <div class="text-[10px] text-slate-400 uppercase">Best MTTD</div>
+            <div id="stat-best-mttd" class="text-xl font-bold text-cyan-400 mt-1">--</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
+            <div class="text-[10px] text-slate-400 uppercase">Best MTTR</div>
+            <div id="stat-best-mttr" class="text-xl font-bold text-purple-400 mt-1">--</div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Riwayat Penanganan Insiden (Audit Log)</h3>
+          <div id="incident-history-list" class="space-y-2 max-h-60 overflow-y-auto pr-1"></div>
+        </div>
+      </div>
+
+      <div class="px-5 py-3 bg-slate-900/95 border-t border-slate-800 flex justify-between items-center">
+        <button onclick="resetStorageStats()" class="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-medium">
+          Reset Data LocalStorage
+        </button>
+        <button onclick="closeScoreboardModal()" class="px-4 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs">
+          Kembali ke SOC
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- HELP / PLAYBOOK GUIDE MODAL -->
+  <!-- =================================================================== -->
+  <div id="help-modal" class="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-3 sm:p-4">
+    <div class="cyber-panel rounded-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden border border-cyan-500/40">
+      <div class="px-5 py-3.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+        <h2 class="font-bold text-base text-white">Panduan Operasional 3D SOC & Incident Response</h2>
+        <button onclick="closeHelpModal()" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono-tech text-slate-300">TUTUP</button>
+      </div>
+      <div class="p-5 overflow-y-auto space-y-3 text-xs text-slate-300 leading-relaxed">
+        <p>Selamat datang di <strong class="text-cyan-300">CYBEROPS 3D</strong>. Anda berperan sebagai Analis SOC Tier-2 yang bertugas mendeteksi, menginvestigasi, dan memitigasi serangan siber secara *real-time* dengan berlari antar stasiun kerja di dalam ruang 3D.</p>
+        
+        <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+          <div class="font-bold text-white uppercase text-[11px]">5 Stasiun Kerja Utama:</div>
+          <div><strong class="text-cyan-400">1. SIEM Console:</strong> Tempat pertama yang wajib Anda datangi saat alarm berbunyi. Analisis log untuk mengekstrak IOC (Hostname, PID, IP C2, atau Hash Malware) dan mencatat waktu deteksi (<strong>MTTD</strong>).</div>
+          <div><strong class="text-purple-400">2. Threat Intelligence Desk:</strong> Verifikasi reputasi IP eksternal / domain penyerang untuk mengonfirmasi sumber serangan botnet/APT.</div>
+          <div><strong class="text-blue-400">3. EDR Workstation:</strong> Isolasi *endpoint* (Workstation/Server) yang terinfeksi, matikan *Process ID* (PID) berbahaya, dan karantina *file hash* ransomware.</div>
+          <div><strong class="text-orange-400">4. Firewall & Network NAC:</strong> Blokir alamat IP C2/Exfiltration, aktifkan *Rate Limiting* untuk menghentikan *Brute Force*, atau pasang aturan *WAF Virtual Patch*.</div>
+          <div><strong class="text-emerald-400">5. Core Server Rack:</strong> Pulihkan *volume* dari *Immutable Snapshot* pasca serangan Ransomware dan lakukan *Hotfix Patching* pada celah kerentanan server.</div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5">
+          <div class="font-bold text-white uppercase text-[11px]">Kontrol Navigasi:</div>
+          <div>&bull; Gunakan tombol <strong class="text-cyan-300">W, A, S, D</strong> atau <strong class="text-cyan-300">Tombol Panah</strong> untuk menggerakkan karakter Analis.</div>
+          <div>&bull; Anda juga bisa <strong>mengklik langsung label nama stasiun di layar 3D</strong> atau tombol <strong>Navigasi Cepat</strong> di panel kanan agar karakter berlari otomatis ke meja tujuan.</div>
+          <div>&bull; Saat berada di dekat meja stasiun, tekan <strong class="text-cyan-300">E</strong> atau <strong class="text-cyan-300">SPASI</strong> untuk membuka layar terminal teknis.</div>
+        </div>
+      </div>
+      <div class="px-5 py-3 bg-slate-900/95 border-t border-slate-800 flex justify-end">
+        <button onclick="closeHelpModal()" class="px-4 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs">Siap Bertugas!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- MAIN APPLICATION & THREE.JS LOGIC -->
+  <!-- =================================================================== -->
+  <script>
+    /*************************************************************************
+     * 1. SYNTHESIZED SOUND ENGINE (WEB AUDIO API - NO EXTERNAL MP3 NEEDED)
+     *************************************************************************/
+    let audioCtx = null;
+    let soundEnabled = true;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          audioCtx = new AudioContextClass();
+        }
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playSound(type) {
+      if (!soundEnabled) return;
+      try {
+        initAudio();
+        if (!audioCtx) return;
+
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (type === 'alarm') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(520, now);
+          osc.frequency.linearRampToValueAtTime(780, now + 0.18);
+          osc.frequency.linearRampToValueAtTime(480, now + 0.35);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+          osc.start(now);
+          osc.stop(now + 0.38);
+        } else if (type === 'open') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
+          gain.gain.setValueAtTime(0.08, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+          osc.start(now);
+          osc.stop(now + 0.14);
+        } else if (type === 'step') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(587.33, now); // D5
+          osc.frequency.setValueAtTime(880, now + 0.09); // A5
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+          osc.start(now);
+          osc.stop(now + 0.25);
+        } else if (type === 'resolved') {
+          // Victory triad
+          const notes = [523.25, 659.25, 783.99, 1046.5];
+          notes.forEach((freq, idx) => {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(freq, now + idx * 0.08);
+            g.gain.setValueAtTime(0.12, now + idx * 0.08);
+            g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.35);
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.start(now + idx * 0.08);
+            o.stop(now + idx * 0.08 + 0.35);
+          });
+        } else if (type === 'error') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(160, now);
+          osc.frequency.setValueAtTime(120, now + 0.1);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+          osc.start(now);
+          osc.stop(now + 0.25);
+        }
+      } catch (e) {
+        // Ignore audio errors on restricted autoplay
+      }
+    }
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      document.getElementById('icon-sound-on').classList.toggle('hidden', !soundEnabled);
+      document.getElementById('icon-sound-off').classList.toggle('hidden', soundEnabled);
+      showToast(soundEnabled ? 'Efek suara diaktifkan' : 'Efek suara dibisukan', 'info');
+    }
+
+    /*************************************************************************
+     * 2. STATIONS & REALISTIC CYBERSECURITY SCENARIOS DEFINITION
+     *************************************************************************/
+    const STATIONS = {
+      siem: {
+        id: 'siem',
+        code: 'SIEM',
+        name: 'SIEM Console',
+        subtitle: 'Log Aggregation, Correlation & Alert Triage',
+        colorHex: 0x00f3ff,
+        cssColor: '#00f3ff',
+        pos: { x: 0, z: -9.5 },
+        rotY: 0
+      },
+      ti: {
+        id: 'ti',
+        code: 'THREAT INTEL',
+        name: 'Threat Intelligence Desk',
+        subtitle: 'OSINT, IOC Reputation & APT Attribution',
+        colorHex: 0xb829ff,
+        cssColor: '#b829ff',
+        pos: { x: -10.5, z: -2.5 },
+        rotY: Math.PI * 0.35
+      },
+      edr: {
+        id: 'edr',
+        code: 'EDR',
+        name: 'EDR Workstation',
+        subtitle: 'Endpoint Detection, Process Tree & Host Isolation',
+        colorHex: 0x3b82f6,
+        cssColor: '#3b82f6',
+        pos: { x: 10.5, z: -2.5 },
+        rotY: -Math.PI * 0.35
+      },
+      fw: {
+        id: 'fw',
+        code: 'FIREWALL & NAC',
+        name: 'Firewall & Network NAC',
+        subtitle: 'Perimeter Filtering, IP Blacklist & WAF Rules',
+        colorHex: 0xf97316,
+        cssColor: '#f97316',
+        pos: { x: -7.5, z: 7.5 },
+        rotY: Math.PI * 0.75
+      },
+      srv: {
+        id: 'srv',
+        code: 'SERVER RACK',
+        name: 'Core Server Rack',
+        subtitle: 'Immutable Backup Restore & Vulnerability Patching',
+        colorHex: 0x10b981,
+        cssColor: '#10b981',
+        pos: { x: 7.5, z: 7.5 },
+        rotY: -Math.PI * 0.75
+      }
+    };
+
+    const SCENARIOS = [
+      {
+        id: 'phishing_rev_shell',
+        title: 'Spear Phishing & Reverse Shell',
+        severity: 'CRITICAL',
+        desc: 'Lampiran invoice palsu memicu eksekusi PowerShell terenkripsi yang membuka koneksi Reverse Shell ke server C2 eksternal.',
+        iocs: {
+          host: 'WS-FINANCE-04',
+          pid: '4812 (powershell.exe -enc)',
+          ip: '185.220.101.44',
+          port: '4444 (TCP Outbound)',
+          hash: 'a94a8fe5ccb19ba61c4c0873d391e987'
+        },
+        siemLog: [
+          '[ALERT #9041] Sysmon EventID 1: Process Creation on WS-FINANCE-04',
+          'ParentProcess: WINWORD.EXE -> ChildProcess: powershell.exe -nop -w hidden -enc JABjAD0ATgBlAHcALQBPAGIAagBlAGMAdAAgAFMAeQBzAHQAZQBtAC4ATgBlAHQALgBTAG8AYwBrAGUAdABzAC4AVABDAFAAQwBsAGkAZQBuAHQAKAAnADEAOAA1AC4AMgAyADAALgAxADAAMQAuADQANAAnACwANAA0ADQANAApAA==',
+          'Process ID (PID): 4812 | User: CORP\\siti.finance',
+          'Zeek Network Log: Outbound TCP connection established from 10.10.4.24 (WS-FINANCE-04) to 185.220.101.44:4444'
+        ],
+        steps: [
+          {
+            station: 'siem',
+            label: 'Buka SIEM Console: Triage Alert & Ekstrak IOC (Host, PID, C2 IP)',
+            actionDesc: 'Triage Log & Ekstrak IOC'
+          },
+          {
+            station: 'edr',
+            label: 'Lari ke EDR Workstation: Pilih WS-FINANCE-04, Matikan PID 4812 & Isolasi Host',
+            actionDesc: 'Kill PID 4812 & Isolasi WS-FINANCE-04'
+          },
+          {
+            station: 'fw',
+            label: 'Lari ke Firewall & NAC: Blokir Outbound C2 IP 185.220.101.44 pada Port 4444',
+            actionDesc: 'Block IP 185.220.101.44 (Port 4444)'
+          }
+        ]
+      },
+      {
+        id: 'ssh_brute_force',
+        title: 'Credential Stuffing & SSH/RDP Brute Force',
+        severity: 'HIGH',
+        desc: 'Lonjakan ribuan percobaan login gagal per menit terdeteksi dari jaringan botnet eksternal terhadap gateway autentikasi.',
+        iocs: {
+          host: 'GW-AUTH-01',
+          pid: '1104 (sshd)',
+          ip: '91.240.118.172',
+          port: '22 / 3389 (SSH & RDP)',
+          hash: 'N/A (Network Attack)'
+        },
+        siemLog: [
+          '[ALERT #9088] High Velocity Authentication Failures Detected (4,520 events / 60s)',
+          'Target Asset: GW-AUTH-01 | Targeted Ports: TCP/22 (SSH) & TCP/3389 (RDP)',
+          'Source Offending IP: 91.240.118.172 (Geo: Eastern Europe Botnet Cluster)',
+          'Sample Log: Failed password for invalid user admin from 91.240.118.172 port 55192 ssh2'
+        ],
+        steps: [
+          {
+            station: 'siem',
+            label: 'Buka SIEM Console: Triage Log Autentikasi & Catat IP Penyerang (91.240.118.172)',
+            actionDesc: 'Triage Alert Brute Force'
+          },
+          {
+            station: 'ti',
+            label: 'Lari ke Threat Intel Desk: Lookup Reputasi IP 91.240.118.172 & Konfirmasi Botnet',
+            actionDesc: 'Lookup & Tag IOC 91.240.118.172'
+          },
+          {
+            station: 'fw',
+            label: 'Lari ke Firewall & NAC: Drop IP 91.240.118.172 & Aktifkan Adaptive Rate Limiting',
+            actionDesc: 'Block IP & Enable Rate Limiting'
+          }
+        ]
+      },
+      {
+        id: 'ransomware_lockbit',
+        title: 'Ransomware Outbreak (LockBit 3.0 SMB)',
+        severity: 'CRITICAL',
+        desc: 'Aktivitas enkripsi file massal dan penghapusan Volume Shadow Copy terdeteksi menyebar melalui protokol SMBv1/v3.',
+        iocs: {
+          host: 'SRV-FILESHARE-01',
+          pid: '6620 (lb3_crypt.exe)',
+          ip: '193.106.191.77',
+          port: '445 (SMB Lateral)',
+          hash: 'e3b0c44298fc1c149afbf4c8996fb924'
+        },
+        siemLog: [
+          '[CRITICAL ALERT #9102] Mass File Modification (.lockbit extension) & Shadow Copy Deletion!',
+          'Affected Server: SRV-FILESHARE-01 | Command Executed: vssadmin.exe delete shadows /all /quiet',
+          'Malicious Binary: C:\\ProgramData\\lb3_crypt.exe (PID: 6620)',
+          'SHA256 Hash: e3b0c44298fc1c149afbf4c8996fb924 | Lateral Movement via TCP Port 445'
+        ],
+        steps: [
+          {
+            station: 'siem',
+            label: 'Buka SIEM Console: Identifikasi Server Terinfeksi (SRV-FILESHARE-01) & SHA256 Hash',
+            actionDesc: 'Triage Alert Ransomware'
+          },
+          {
+            station: 'edr',
+            label: 'Lari ke EDR Workstation: Isolasi SRV-FILESHARE-01 & Karantina SHA256 Hash',
+            actionDesc: 'Isolasi Server & Karantina Hash'
+          },
+          {
+            station: 'srv',
+            label: 'Lari ke Core Server Rack: Pulihkan Volume dari Immutable Snapshot & Patch SMB',
+            actionDesc: 'Restore Snapshot & Patch SMB'
+          }
+        ]
+      },
+      {
+        id: 'sqli_exfil',
+        title: 'Zero-Day SQL Injection & Data Exfiltration',
+        severity: 'HIGH',
+        desc: 'Injeksi payload UNION SELECT pada API aplikasi web berhasil mengekstrak tabel pengguna dan mengirimkannya keluar jaringan.',
+        iocs: {
+          host: 'PROD-DB-CLUSTER',
+          pid: '3306 (mysqld)',
+          ip: '45.155.205.99',
+          port: '443 (HTTPS Exfil)',
+          hash: 'sqlmap_payload_v4'
+        },
+        siemLog: [
+          '[WAF & DB ALERT #9155] Anomalous SQL Query & Large Outbound Transfer (1.4 GB)',
+          'Target Server: PROD-DB-CLUSTER | URI: /api/v2/orders?id=-1%27+UNION+SELECT+username,password_hash+FROM+users--',
+          'Outbound Exfiltration Destination IP: 45.155.205.99:443',
+          'Recommendation: Block Exfil IP immediately and patch Web App SQL Parameterization.'
+        ],
+        steps: [
+          {
+            station: 'siem',
+            label: 'Buka SIEM Console: Triage Payload SQLi & Identifikasi IP Eksfiltrasi (45.155.205.99)',
+            actionDesc: 'Triage Alert SQLi & Exfil'
+          },
+          {
+            station: 'fw',
+            label: 'Lari ke Firewall & NAC: Blokir IP Eksfiltrasi 45.155.205.99 & Pasang WAF Virtual Patch',
+            actionDesc: 'Block IP 45.155.205.99 & Aktifkan WAF'
+          },
+          {
+            station: 'srv',
+            label: 'Lari ke Core Server Rack: Patch Layanan PROD-DB-CLUSTER & Rotasi Kredensial DB',
+            actionDesc: 'Patch DB Cluster & Rotate Keys'
+          }
+        ]
+      }
+    ];
+
+    /*************************************************************************
+     * 3. GAME STATE & LOCALSTORAGE PERSISTENCE
+     *************************************************************************/
+    const STORAGE_KEY = 'cyberops_3d_soc_stats_v1';
+
+    let gameState = {
+      networkHealth: 100,
+      activeIncident: null, // { scenario, currentStepIndex, startTime, detectedTime, iocsExtracted }
+      waveMode: false,
+      waveCooldown: 0,
+      nearbyStationId: null,
+      openModalStationId: null,
+      cameraMode: 'isometric', // 'isometric' | 'follow'
+      stats: {
+        score: 0,
+        resolvedCount: 0,
+        mttdList: [],
+        mttrList: [],
+        history: []
+      }
+    };
+
+    function loadStats() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          gameState.stats = {
+            score: parsed.score || 0,
+            resolvedCount: parsed.resolvedCount || 0,
+            mttdList: Array.isArray(parsed.mttdList) ? parsed.mttdList : [],
+            mttrList: Array.isArray(parsed.mttrList) ? parsed.mttrList : [],
+            history: Array.isArray(parsed.history) ? parsed.history : []
+          };
+        }
+      } catch (e) {
+        console.warn('Gagal memuat localStorage:', e);
+      }
+      updateHudMetrics();
+    }
+
+    function saveStats() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState.stats));
+      } catch (e) {
+        console.warn('Gagal menyimpan localStorage:', e);
+      }
+      updateHudMetrics();
+    }
+
+    function resetStorageStats() {
+      gameState.stats = {
+        score: 0,
+        resolvedCount: 0,
+        mttdList: [],
+        mttrList: [],
+        history: []
+      };
+      saveStats();
+      renderScoreboardData();
+      showToast('Statistik LocalStorage berhasil di-reset!', 'info');
+    }
+
+    function updateHudMetrics() {
+      const { score, mttdList, mttrList } = gameState.stats;
+      document.getElementById('hud-score').textContent = score.toLocaleString('id-ID');
+
+      if (mttdList.length > 0) {
+        const avgMttd = (mttdList.reduce((a, b) => a + b, 0) / mttdList.length).toFixed(1);
+        document.getElementById('hud-mttd').textContent = `${avgMttd} dtk`;
+      } else {
+        document.getElementById('hud-mttd').textContent = '-- dtk';
+      }
+
+      if (mttrList.length > 0) {
+        const avgMttr = (mttrList.reduce((a, b) => a + b, 0) / mttrList.length).toFixed(1);
+        document.getElementById('hud-mttr').textContent = `${avgMttr} dtk`;
+      } else {
+        document.getElementById('hud-mttr').textContent = '-- dtk';
+      }
+    }
+
+    /*************************************************************************
+     * 4. THREE.JS 3D SOC ENVIRONMENT & PROCEDURAL GEOMETRY
+     *************************************************************************/
+    let scene, camera, renderer;
+    let playerGroup, playerLimbs = {};
+    let stationObjects = {}; // id -> { group, beaconMesh, ringMesh, light, labelEl }
+    let coreHologramMesh;
+    let clock = new THREE.Clock();
+
+    // Movement & Input State
+    const keysPressed = { w: false, a: false, s: false, d: false };
+    let autoWalkTarget = null;
+    let cameraOrbitAngle = 0;
+    let isDraggingCamera = false;
+    let prevMouseX = 0;
+
+    function initThreeJS() {
+      const container = document.getElementById('canvas-container');
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x050811);
+      scene.fog = new THREE.FogExp2(0x050811, 0.022);
+
+      camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 120);
+      camera.position.set(0, 19, 19);
+      camera.lookAt(0, 0, 0);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      // Ambient & Directional Lights
+      const ambientLight = new THREE.AmbientLight(0x1e293b, 1.5);
+      scene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(0x38bdf8, 0.9);
+      dirLight.position.set(12, 24, 14);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 1024;
+      dirLight.shadow.mapSize.height = 1024;
+      scene.add(dirLight);
+
+      buildSocFloorAndWalls();
+      buildCentralHologramTable();
+      buildAllStations();
+      buildPlayerAvatar();
+      setupMouseAndTouchControls();
+
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function buildSocFloorAndWalls() {
+      // Main Floor Base
+      const floorGeo = new THREE.PlaneGeometry(36, 30);
+      const floorMat = new THREE.MeshStandardMaterial({
+        color: 0x090f1d,
+        roughness: 0.4,
+        metalness: 0.5
+      });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      scene.add(floor);
+
+      // Cyber Grid Helper
+      const gridHelper = new THREE.GridHelper(34, 34, 0x0ea5e9, 0x1e293b);
+      gridHelper.position.y = 0.02;
+      scene.add(gridHelper);
+
+      // Glowing Perimeter Border
+      const borderGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(32, 0.2, 26));
+      const borderMat = new THREE.LineBasicMaterial({ color: 0x00f3ff, transparent: true, opacity: 0.4 });
+      const borderLine = new THREE.LineSegments(borderGeo, borderMat);
+      borderLine.position.y = 0.1;
+      scene.add(borderLine);
+
+      // Back Wall Big SOC Video Wall (Decorative Global Threat Map)
+      const wallGroup = new THREE.Group();
+      wallGroup.position.set(0, 4.2, -13.2);
+
+      const wallFrame = new THREE.Mesh(
+        new THREE.BoxGeometry(16, 4.6, 0.4),
+        new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8, roughness: 0.2 })
+      );
+      wallGroup.add(wallFrame);
+
+      const screenCanvas = createBigScreenTexture();
+      const screenTex = new THREE.CanvasTexture(screenCanvas);
+      const screenMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(15.2, 4.0),
+        new THREE.MeshBasicMaterial({ map: screenTex })
+      );
+      screenMesh.position.z = 0.22;
+      wallGroup.add(screenMesh);
+
+      scene.add(wallGroup);
+
+      // Side Decorative Pillar Lights
+      const pillarPositions = [
+        [-15.5, -12], [15.5, -12],
+        [-15.5, 0],   [15.5, 0],
+        [-15.5, 12],  [15.5, 12]
+      ];
+      pillarPositions.forEach(([px, pz]) => {
+        const pGroup = new THREE.Group();
+        pGroup.position.set(px, 2.5, pz);
+        const pillar = new THREE.Mesh(
+          new THREE.BoxGeometry(0.6, 5, 0.6),
+          new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.7, roughness: 0.3 })
+        );
+        pGroup.add(pillar);
+
+        const strip = new THREE.Mesh(
+          new THREE.BoxGeometry(0.15, 4.6, 0.65),
+          new THREE.MeshBasicMaterial({ color: 0x00f3ff })
+        );
+        pGroup.add(strip);
+        scene.add(pGroup);
+      });
+    }
+
+    function createBigScreenTexture() {
+      const c = document.createElement('canvas');
+      c.width = 1024;
+      c.height = 256;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#040a18';
+      ctx.fillRect(0, 0, c.width, c.height);
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(0, 243, 255, 0.14)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < c.width; x += 32) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, c.height); ctx.stroke();
+      }
+      for (let y = 0; y < c.height; y += 32) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(c.width, y); ctx.stroke();
+      }
+
+      // Simulated Threat Arcs
+      ctx.strokeStyle = '#00f3ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(180, 180);
+      ctx.quadraticCurveTo(450, 20, 720, 150);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(850, 90);
+      ctx.quadraticCurveTo(550, 30, 320, 160);
+      ctx.stroke();
+
+      // Header text
+      ctx.fillStyle = '#00f3ff';
+      ctx.font = 'bold 26px monospace';
+      ctx.fillText('GLOBAL CYBER THREAT TELEMETRY // SOC COMMAND CENTER', 30, 42);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '18px monospace';
+      ctx.fillText('SIEM: ONLINE   |   EDR AGENTS: 254 ACTIVE   |   ZERO-TRUST FIREWALL: ENFORCING', 30, 225);
+
+      return c;
+    }
+
+    function buildCentralHologramTable() {
+      const centerGroup = new THREE.Group();
+      centerGroup.position.set(0, 0, 0.5);
+
+      // Octagonal Pedestal
+      const baseGeo = new THREE.CylinderGeometry(2.1, 2.4, 0.8, 8);
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8, roughness: 0.3 });
+      const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+      baseMesh.position.y = 0.4;
+      baseMesh.castShadow = true;
+      centerGroup.add(baseMesh);
+
+      // Glowing Cyan Ring on Table
+      const ringGeo = new THREE.RingGeometry(1.6, 1.9, 32);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff, side: THREE.DoubleSide });
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.rotation.x = -Math.PI / 2;
+      ringMesh.position.y = 0.82;
+      centerGroup.add(ringMesh);
+
+      // Wireframe Rotating Globe (Core Hologram)
+      const holoGeo = new THREE.IcosahedronGeometry(1.15, 2);
+      const holoMat = new THREE.MeshBasicMaterial({
+        color: 0x00f3ff,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.65
+      });
+      coreHologramMesh = new THREE.Mesh(holoGeo, holoMat);
+      coreHologramMesh.position.y = 2.3;
+      centerGroup.add(coreHologramMesh);
+
+      scene.add(centerGroup);
+    }
+
+    function buildAllStations() {
+      const labelsContainer = document.getElementById('labels-container');
+      labelsContainer.innerHTML = '';
+
+      Object.values(STATIONS).forEach((st) => {
+        const group = new THREE.Group();
+        group.position.set(st.pos.x, 0, st.pos.z);
+        group.rotation.y = st.rotY;
+
+        // Floor Proximity Ring
+        const ringGeo = new THREE.RingGeometry(2.1, 2.35, 36);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: st.colorHex,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.55
+        });
+        const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+        ringMesh.rotation.x = -Math.PI / 2;
+        ringMesh.position.y = 0.04;
+        group.add(ringMesh);
+
+        if (st.id === 'srv') {
+          // Server Rack Geometry (3 tall cabinets)
+          for (let i = -1; i <= 1; i++) {
+            const rack = new THREE.Mesh(
+              new THREE.BoxGeometry(1.1, 3.2, 1.1),
+              new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8, roughness: 0.25 })
+            );
+            rack.position.set(i * 1.25, 1.6, 0);
+            rack.castShadow = true;
+            group.add(rack);
+
+            // Blinking LED strips on server blades
+            for (let b = 0; b < 5; b++) {
+              const led = new THREE.Mesh(
+                new THREE.BoxGeometry(0.85, 0.08, 0.05),
+                new THREE.MeshBasicMaterial({ color: st.colorHex })
+              );
+              led.position.set(i * 1.25, 0.6 + b * 0.5, 0.56);
+              group.add(led);
+            }
+          }
+        } else {
+          // Futuristic SOC Console Desk + Dual/Triple Curved Monitors
+          const deskTop = new THREE.Mesh(
+            new THREE.BoxGeometry(3.4, 0.15, 1.5),
+            new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.7, roughness: 0.3 })
+          );
+          deskTop.position.y = 1.05;
+          deskTop.castShadow = true;
+          group.add(deskTop);
+
+          const leftLeg = new THREE.Mesh(
+            new THREE.BoxGeometry(0.2, 1.05, 1.3),
+            new THREE.MeshStandardMaterial({ color: 0x0f172a })
+          );
+          leftLeg.position.set(-1.5, 0.525, 0);
+          group.add(leftLeg);
+
+          const rightLeg = leftLeg.clone();
+          rightLeg.position.x = 1.5;
+          group.add(rightLeg);
+
+          // Neon front edge strip
+          const neonEdge = new THREE.Mesh(
+            new THREE.BoxGeometry(3.42, 0.06, 0.05),
+            new THREE.MeshBasicMaterial({ color: st.colorHex })
+          );
+          neonEdge.position.set(0, 1.05, 0.76);
+          group.add(neonEdge);
+
+          // 3 Monitors on the desk
+          [-0.95, 0, 0.95].forEach((mx, idx) => {
+            const monGroup = new THREE.Group();
+            monGroup.position.set(mx, 1.55, -0.25);
+            if (idx === 0) monGroup.rotation.y = 0.25;
+            if (idx === 2) monGroup.rotation.y = -0.25;
+
+            const frame = new THREE.Mesh(
+              new THREE.BoxGeometry(0.88, 0.58, 0.06),
+              new THREE.MeshStandardMaterial({ color: 0x090d16 })
+            );
+            monGroup.add(frame);
+
+            const screen = new THREE.Mesh(
+              new THREE.PlaneGeometry(0.8, 0.5),
+              new THREE.MeshBasicMaterial({ color: st.colorHex, transparent: true, opacity: 0.82 })
+            );
+            screen.position.z = 0.035;
+            monGroup.add(screen);
+
+            group.add(monGroup);
+          });
+        }
+
+        // Alarm Beacon Pole & Glowing Sphere above Station
+        const pole = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.05, 0.05, 1.4, 8),
+          new THREE.MeshStandardMaterial({ color: 0x334155 })
+        );
+        pole.position.set(0, 2.7, -0.5);
+        group.add(pole);
+
+        const beaconMesh = new THREE.Mesh(
+          new THREE.SphereGeometry(0.24, 16, 16),
+          new THREE.MeshBasicMaterial({ color: st.colorHex })
+        );
+        beaconMesh.position.set(0, 3.5, -0.5);
+        group.add(beaconMesh);
+
+        const pointLight = new THREE.PointLight(st.colorHex, 1.2, 8);
+        pointLight.position.set(0, 3.0, 0.5);
+        group.add(pointLight);
+
+        scene.add(group);
+
+        // Create Floating HTML Overlay Badge
+        const labelEl = document.createElement('div');
+        labelEl.className = 'station-label cyber-panel rounded-xl px-2.5 py-1.5 flex items-center gap-2 border';
+        labelEl.style.borderColor = st.cssColor;
+        labelEl.onclick = () => {
+          walkToStation(st.id, true);
+        };
+        labelEl.innerHTML = `
+          <span id="badge-dot-${st.id}" class="w-2.5 h-2.5 rounded-full" style="background:${st.cssColor}"></span>
+          <div class="text-left">
+            <div class="font-mono-tech font-bold text-[11px] text-white leading-none">${st.code}</div>
+            <div id="badge-sub-${st.id}" class="text-[9px] text-slate-300 mt-0.5">Klik: Lari ke Meja</div>
+          </div>
+        `;
+        labelsContainer.appendChild(labelEl);
+
+        stationObjects[st.id] = {
+          station: st,
+          group,
+          beaconMesh,
+          ringMesh,
+          light: pointLight,
+          labelEl
+        };
+      });
+    }
+
+    function buildPlayerAvatar() {
+      playerGroup = new THREE.Group();
+      playerGroup.position.set(0, 0, 4.2);
+
+      // Floor Target Ring Under Player
+      const pRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.55, 0.72, 24),
+        new THREE.MeshBasicMaterial({ color: 0x00f3ff, side: THREE.DoubleSide })
+      );
+      pRing.rotation.x = -Math.PI / 2;
+      pRing.position.y = 0.03;
+      playerGroup.add(pRing);
+
+      // Torso
+      const torso = new THREE.Mesh(
+        new THREE.BoxGeometry(0.65, 0.85, 0.4),
+        new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.6, roughness: 0.3 })
+      );
+      torso.position.y = 1.15;
+      torso.castShadow = true;
+      playerGroup.add(torso);
+
+      // Cyber Chest Core
+      const chestCore = new THREE.Mesh(
+        new THREE.BoxGeometry(0.28, 0.28, 0.05),
+        new THREE.MeshBasicMaterial({ color: 0x00f3ff })
+      );
+      chestCore.position.set(0, 1.22, 0.21);
+      playerGroup.add(chestCore);
+
+      // Head
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, 0.48, 0.48),
+        new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.2 })
+      );
+      head.position.y = 1.9;
+      head.castShadow = true;
+      playerGroup.add(head);
+
+      // Glowing Cyan Visor (Front of Face)
+      const visor = new THREE.Mesh(
+        new THREE.BoxGeometry(0.44, 0.16, 0.06),
+        new THREE.MeshBasicMaterial({ color: 0x00f3ff })
+      );
+      visor.position.set(0, 1.92, 0.23);
+      playerGroup.add(visor);
+
+      // Articulated Limbs
+      const limbGeo = new THREE.BoxGeometry(0.2, 0.65, 0.2);
+      const limbMat = new THREE.MeshStandardMaterial({ color: 0x475569 });
+
+      const leftLeg = new THREE.Mesh(limbGeo, limbMat);
+      leftLeg.position.set(-0.18, 0.38, 0);
+      playerGroup.add(leftLeg);
+
+      const rightLeg = new THREE.Mesh(limbGeo, limbMat);
+      rightLeg.position.set(0.18, 0.38, 0);
+      playerGroup.add(rightLeg);
+
+      const leftArm = new THREE.Mesh(limbGeo, limbMat);
+      leftArm.position.set(-0.46, 1.15, 0);
+      playerGroup.add(leftArm);
+
+      const rightArm = new THREE.Mesh(limbGeo, limbMat);
+      rightArm.position.set(0.46, 1.15, 0);
+      playerGroup.add(rightArm);
+
+      playerLimbs = { leftLeg, rightLeg, leftArm, rightArm };
+      scene.add(playerGroup);
+    }
+
+    /*************************************************************************
+     * 5. PLAYER MOVEMENT, CAMERA CONTROLS & PROXIMITY DETECTION
+     *************************************************************************/
+    function setupMouseAndTouchControls() {
+      // Keyboard Listeners
+      window.addEventListener('keydown', (e) => {
+        if (document.activeElement && document.activeElement.id === 'cli-input') {
+          if (e.key === 'Escape') closeStationModal();
+          return;
+        }
+
+        const k = e.key.toLowerCase();
+        if (k === 'w' || e.key === 'ArrowUp') { keysPressed.w = true; autoWalkTarget = null; }
+        if (k === 's' || e.key === 'ArrowDown') { keysPressed.s = true; autoWalkTarget = null; }
+        if (k === 'a' || e.key === 'ArrowLeft') { keysPressed.a = true; autoWalkTarget = null; }
+        if (k === 'd' || e.key === 'ArrowRight') { keysPressed.d = true; autoWalkTarget = null; }
+
+        if (k === 'e' || e.key === ' ') {
+          if (gameState.openModalStationId) return;
+          if (gameState.nearbyStationId) {
+            e.preventDefault();
+            openNearbyStationModal();
+          }
+        }
+        if (k === 'escape') {
+          closeStationModal();
+          closeScoreboardModal();
+          closeHelpModal();
+        }
+        if (k === 'v') {
+          toggleCameraMode();
+        }
+        if (k === 'm') {
+          toggleSound();
+        }
+      });
+
+      window.addEventListener('keyup', (e) => {
+        const k = e.key.toLowerCase();
+        if (k === 'w' || e.key === 'ArrowUp') keysPressed.w = false;
+        if (k === 's' || e.key === 'ArrowDown') keysPressed.s = false;
+        if (k === 'a' || e.key === 'ArrowLeft') keysPressed.a = false;
+        if (k === 'd' || e.key === 'ArrowRight') keysPressed.d = false;
+      });
+
+      // On-Screen Touch/Click D-Pad
+      const bindDpad = (id, keyName) => {
+        const btn = document.getElementById(id);
+        const start = (ev) => { ev.preventDefault(); keysPressed[keyName] = true; autoWalkTarget = null; };
+        const end = (ev) => { ev.preventDefault(); keysPressed[keyName] = false; };
+        btn.addEventListener('mousedown', start);
+        btn.addEventListener('mouseup', end);
+        btn.addEventListener('mouseleave', end);
+        btn.addEventListener('touchstart', start, { passive: false });
+        btn.addEventListener('touchend', end, { passive: false });
+      };
+      bindDpad('dpad-up', 'w');
+      bindDpad('dpad-down', 's');
+      bindDpad('dpad-left', 'a');
+      bindDpad('dpad-right', 'd');
+
+      // Mouse Drag Camera Orbit
+      const domEl = renderer.domElement;
+      domEl.addEventListener('mousedown', (e) => {
+        isDraggingCamera = true;
+        prevMouseX = e.clientX;
+      });
+      window.addEventListener('mouseup', () => {
+        isDraggingCamera = false;
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (!isDraggingCamera) return;
+        const deltaX = e.clientX - prevMouseX;
+        prevMouseX = e.clientX;
+        cameraOrbitAngle -= deltaX * 0.005;
+      });
+    }
+
+    function walkToStation(stationId, openWhenArrived = false) {
+      const st = STATIONS[stationId];
+      if (!st) return;
+      // Stand slightly in front of the station towards center of room
+      const angleToCenter = Math.atan2(-st.pos.x, -st.pos.z);
+      const stopX = st.pos.x + Math.sin(angleToCenter) * 1.9;
+      const stopZ = st.pos.z + Math.cos(angleToCenter) * 1.9;
+      autoWalkTarget = { x: stopX, z: stopZ, stationId, openWhenArrived };
+    }
+
+    function toggleCameraMode() {
+      gameState.cameraMode = gameState.cameraMode === 'isometric' ? 'follow' : 'isometric';
+      const label = document.getElementById('camera-mode-label');
+      label.textContent = gameState.cameraMode === 'isometric' ? 'Kamera: Isometrik' : 'Kamera: Follow 3D';
+      showToast(`Mode kamera diubah ke ${gameState.cameraMode === 'isometric' ? 'Isometrik' : 'Follow 3D'}`, 'info');
+    }
+
+    function updatePlayerAndCamera(dt, elapsed) {
+      if (!playerGroup) return;
+
+      const moveSpeed = 7.8;
+      let moveX = 0;
+      let moveZ = 0;
+
+      if (keysPressed.w) moveZ -= 1;
+      if (keysPressed.s) moveZ += 1;
+      if (keysPressed.a) moveX -= 1;
+      if (keysPressed.d) moveX += 1;
+
+      if (moveX !== 0 || moveZ !== 0) {
+        const len = Math.hypot(moveX, moveZ);
+        moveX /= len;
+        moveZ /= len;
+      } else if (autoWalkTarget) {
+        const dx = autoWalkTarget.x - playerGroup.position.x;
+        const dz = autoWalkTarget.z - playerGroup.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist > 0.25) {
+          moveX = dx / dist;
+          moveZ = dz / dist;
+        } else {
+          const arrivedStation = autoWalkTarget.stationId;
+          const shouldOpen = autoWalkTarget.openWhenArrived;
+          autoWalkTarget = null;
+          if (shouldOpen && arrivedStation) {
+            openStationModal(arrivedStation);
+          }
+        }
+      }
+
+      const isMoving = Math.abs(moveX) > 0.01 || Math.abs(moveZ) > 0.01;
+      if (isMoving && !gameState.openModalStationId) {
+        let nextX = playerGroup.position.x + moveX * moveSpeed * dt;
+        let nextZ = playerGroup.position.z + moveZ * moveSpeed * dt;
+
+        // Keep inside room boundaries
+        nextX = Math.max(-14.2, Math.min(14.2, nextX));
+        nextZ = Math.max(-11.2, Math.min(11.2, nextZ));
+
+        // Avoid central hologram table collision (center at 0, 0.5, radius ~2.6)
+        const distToCenter = Math.hypot(nextX, nextZ - 0.5);
+        if (distToCenter < 2.65) {
+          const pushAngle = Math.atan2(nextX, nextZ - 0.5);
+          nextX = Math.sin(pushAngle) * 2.65;
+          nextZ = 0.5 + Math.cos(pushAngle) * 2.65;
+        }
+
+        playerGroup.position.x = nextX;
+        playerGroup.position.z = nextZ;
+
+        // Smoothly rotate character towards movement direction
+        const targetRot = Math.atan2(moveX, moveZ);
+        playerGroup.rotation.y = targetRot;
+
+        // Walking limb swing animation
+        const swing = Math.sin(elapsed * 14) * 0.55;
+        playerLimbs.leftLeg.rotation.x = swing;
+        playerLimbs.rightLeg.rotation.x = -swing;
+        playerLimbs.leftArm.rotation.x = -swing * 0.8;
+        playerLimbs.rightArm.rotation.x = swing * 0.8;
+      } else {
+        playerLimbs.leftLeg.rotation.x = 0;
+        playerLimbs.rightLeg.rotation.x = 0;
+        playerLimbs.leftArm.rotation.x = 0;
+        playerLimbs.rightArm.rotation.x = 0;
+      }
+
+      // Update Camera Position
+      if (gameState.cameraMode === 'isometric') {
+        const radius = 21;
+        const camX = Math.sin(cameraOrbitAngle) * radius + playerGroup.position.x * 0.25;
+        const camZ = Math.cos(cameraOrbitAngle) * radius + playerGroup.position.z * 0.25;
+        camera.position.lerp(new THREE.Vector3(camX, 18.5, camZ), 0.08);
+        camera.lookAt(playerGroup.position.x * 0.3, 0.8, playerGroup.position.z * 0.3);
+      } else {
+        // Close Follow 3D View
+        const targetCamPos = new THREE.Vector3(
+          playerGroup.position.x + Math.sin(cameraOrbitAngle) * 7,
+          6.2,
+          playerGroup.position.z + Math.cos(cameraOrbitAngle) * 8.5
+        );
+        camera.position.lerp(targetCamPos, 0.1);
+        camera.lookAt(playerGroup.position.x, 1.5, playerGroup.position.z - 1.5);
+      }
+
+      // Check Proximity to Stations
+      let closestId = null;
+      let minDist = 3.4; // Activation radius
+
+      Object.values(STATIONS).forEach((st) => {
+        const d = Math.hypot(playerGroup.position.x - st.pos.x, playerGroup.position.z - st.pos.z);
+        if (d < minDist) {
+          minDist = d;
+          closestId = st.id;
+        }
+      });
+
+      if (closestId !== gameState.nearbyStationId) {
+        gameState.nearbyStationId = closestId;
+        const promptEl = document.getElementById('proximity-prompt');
+        const nameEl = document.getElementById('proximity-station-name');
+        if (closestId) {
+          nameEl.textContent = `Buka Terminal ${STATIONS[closestId].name}`;
+          promptEl.classList.remove('hidden');
+        } else {
+          promptEl.classList.add('hidden');
+        }
+      }
+    }
+
+    function updateStationVisualsAndLabels(elapsed) {
+      const requiredStationId = getRequiredStationForCurrentStep();
+
+      Object.values(stationObjects).forEach((obj) => {
+        const isTarget = requiredStationId === obj.station.id;
+        const dotEl = document.getElementById(`badge-dot-${obj.station.id}`);
+        const subEl = document.getElementById(`badge-sub-${obj.station.id}`);
+
+        if (isTarget) {
+          // Pulse Red Alarm on the required station!
+          const pulse = 0.5 + 0.5 * Math.sin(elapsed * 9);
+          obj.beaconMesh.material.color.setHex(0xef4444);
+          obj.beaconMesh.scale.setScalar(1 + pulse * 0.45);
+          obj.ringMesh.material.color.setHex(0xef4444);
+          obj.ringMesh.material.opacity = 0.4 + pulse * 0.5;
+          obj.light.color.setHex(0xef4444);
+          obj.light.intensity = 1.5 + pulse * 1.5;
+
+          obj.labelEl.classList.add('alert-ring');
+          if (dotEl) dotEl.style.background = '#ef4444';
+          if (subEl) {
+            subEl.textContent = '⚠ TINDAKAN DIPERLUKAN!';
+            subEl.className = 'text-[9px] font-bold text-rose-400 mt-0.5';
+          }
+        } else {
+          obj.beaconMesh.material.color.setHex(obj.station.colorHex);
+          obj.beaconMesh.scale.setScalar(1);
+          obj.ringMesh.material.color.setHex(obj.station.colorHex);
+          obj.ringMesh.material.opacity = 0.5;
+          obj.light.color.setHex(obj.station.colorHex);
+          obj.light.intensity = 1.1;
+
+          obj.labelEl.classList.remove('alert-ring');
+          if (dotEl) dotEl.style.background = obj.station.cssColor;
+          if (subEl) {
+            subEl.textContent = 'Klik: Lari ke Meja';
+            subEl.className = 'text-[9px] text-slate-300 mt-0.5';
+          }
+        }
+
+        // Project 3D position above station to 2D screen coordinates
+        const worldPos = new THREE.Vector3(obj.station.pos.x, 4.1, obj.station.pos.z);
+        worldPos.project(camera);
+
+        const x = (worldPos.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-(worldPos.y * 0.5) + 0.5) * window.innerHeight;
+
+        if (worldPos.z < 1) {
+          obj.labelEl.style.display = 'flex';
+          obj.labelEl.style.left = `${x}px`;
+          obj.labelEl.style.top = `${y}px`;
+        } else {
+          obj.labelEl.style.display = 'none';
+        }
+      });
+    }
+
+    function onWindowResize() {
+      if (!camera || !renderer) return;
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    /*************************************************************************
+     * 6. INCIDENT RESPONSE ENGINE & PLAYBOOK LOGIC
+     *************************************************************************/
+    function getRequiredStationForCurrentStep() {
+      if (!gameState.activeIncident) return null;
+      const step = gameState.activeIncident.scenario.steps[gameState.activeIncident.currentStepIndex];
+      return step ? step.station : null;
+    }
+
+    function triggerRandomScenario() {
+      const idx = Math.floor(Math.random() * SCENARIOS.length);
+      startScenario(idx);
+    }
+
+    function startScenario(index) {
+      const scenario = SCENARIOS[index];
+      if (!scenario) return;
+
+      gameState.activeIncident = {
+        scenario,
+        currentStepIndex: 0,
+        startTime: performance.now(),
+        detectedTime: null,
+        mttdSeconds: null,
+        iocsExtracted: false
+      };
+
+      playSound('alarm');
+      updateIncidentSidebarUI();
+      showToast(`🚨 INSIDEN DARURAT: ${scenario.title}! Segera lari ke SIEM Console!`, 'danger');
+    }
+
+    function toggleWaveMode() {
+      gameState.waveMode = !gameState.waveMode;
+      const btn = document.getElementById('btn-wave-toggle');
+      if (gameState.waveMode) {
+        btn.textContent = 'Auto-Wave: ON';
+        btn.className = 'text-[10px] font-mono-tech px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 transition';
+        showToast('Mode Auto-Wave Aktif: Serangan otomatis akan datang berkala.', 'info');
+        if (!gameState.activeIncident) {
+          triggerRandomScenario();
+        }
+      } else {
+        btn.textContent = 'Auto-Wave: OFF';
+        btn.className = 'text-[10px] font-mono-tech px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 transition';
+        showToast('Mode Auto-Wave Dinonaktifkan.', 'info');
+      }
+    }
+
+    function updateIncidentSidebarUI() {
+      const card = document.getElementById('incident-card');
+      const noIncView = document.getElementById('no-incident-view');
+      const activeView = document.getElementById('active-incident-view');
+      const scratchpad = document.getElementById('ioc-scratchpad');
+      const threatBadge = document.getElementById('soc-threat-badge');
+      const statusDot = document.getElementById('soc-status-dot');
+      const statusDotSolid = document.getElementById('soc-status-dot-solid');
+
+      if (!gameState.activeIncident) {
+        card.className = 'cyber-panel rounded-xl p-3.5 pointer-events-auto transition-all duration-300';
+        noIncView.classList.remove('hidden');
+        activeView.classList.add('hidden');
+        scratchpad.classList.add('hidden');
+        document.getElementById('incident-timer').textContent = '00:00';
+
+        threatBadge.textContent = 'DEFCON 5: AMAN';
+        threatBadge.className = 'text-[10px] font-mono-tech font-semibold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+        statusDot.className = 'absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping';
+        statusDotSolid.className = 'absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400';
+        return;
+      }
+
+      const { scenario, currentStepIndex, iocsExtracted } = gameState.activeIncident;
+
+      card.className = 'cyber-panel-danger rounded-xl p-3.5 pointer-events-auto transition-all duration-300';
+      noIncView.classList.add('hidden');
+      activeView.classList.remove('hidden');
+
+      threatBadge.textContent = 'DEFCON 1: INSIDEN AKTIF';
+      threatBadge.className = 'text-[10px] font-mono-tech font-semibold px-1.5 py-0.5 rounded bg-rose-500/25 text-rose-300 border border-rose-500/50 animate-pulse';
+      statusDot.className = 'absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping';
+      statusDotSolid.className = 'absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500';
+
+      document.getElementById('inc-severity').textContent = scenario.severity;
+      document.getElementById('inc-title').textContent = scenario.title;
+      document.getElementById('inc-desc').textContent = scenario.desc;
+
+      // Render Playbook Steps
+      const listEl = document.getElementById('playbook-steps-list');
+      listEl.innerHTML = '';
+      scenario.steps.forEach((st, idx) => {
+        const isDone = idx < currentStepIndex;
+        const isCurrent = idx === currentStepIndex;
+        const row = document.createElement('div');
+        row.className = `p-2 rounded-lg border flex items-start gap-2 ${
+          isDone
+            ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+            : isCurrent
+            ? 'bg-rose-950/60 border-rose-500/60 text-white font-semibold'
+            : 'bg-slate-900/50 border-slate-800 text-slate-500'
+        }`;
+        row.innerHTML = `
+          <span class="font-mono-tech text-xs mt-0.5">${isDone ? '✔' : isCurrent ? '▶' : `${idx + 1}.`}</span>
+          <div class="flex-1">
+            <div>${st.label}</div>
+            ${
+              isCurrent
+                ? `<button onclick="walkToStation('${st.station}', true)" class="mt-1.5 px-2 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400/50 text-cyan-300 font-mono-tech text-[10px] transition">🏃 Lari Otomatis ke ${STATIONS[st.station].code}</button>`
+                : ''
+            }
+          </div>
+        `;
+        listEl.appendChild(row);
+      });
+
+      // Render IOC Scratchpad if SIEM Triage completed
+      if (iocsExtracted) {
+        scratchpad.classList.remove('hidden');
+        const iocList = document.getElementById('ioc-badges-list');
+        const { iocs } = scenario;
+        iocList.innerHTML = `
+          <div class="px-2 py-1 rounded bg-slate-900 border border-slate-800 flex justify-between"><span class="text-slate-400">HOST:</span><span class="text-cyan-300 font-bold">${iocs.host}</span></div>
+          <div class="px-2 py-1 rounded bg-slate-900 border border-slate-800 flex justify-between"><span class="text-slate-400">PID:</span><span class="text-amber-300 font-bold">${iocs.pid}</span></div>
+          <div class="px-2 py-1 rounded bg-slate-900 border border-slate-800 flex justify-between"><span class="text-slate-400">IOC IP:</span><span class="text-rose-300 font-bold">${iocs.ip}</span></div>
+          <div class="px-2 py-1 rounded bg-slate-900 border border-slate-800 flex justify-between"><span class="text-slate-400">HASH:</span><span class="text-purple-300 truncate max-w-[140px]">${iocs.hash}</span></div>
+        `;
+      } else {
+        scratchpad.classList.add('hidden');
+      }
+    }
+
+    function completeCurrentPlaybookStep(customSuccessMsg) {
+      if (!gameState.activeIncident) return;
+      const inc = gameState.activeIncident;
+
+      // Record MTTD on Step 0 (SIEM Triage)
+      if (inc.currentStepIndex === 0 && !inc.detectedTime) {
+        inc.detectedTime = performance.now();
+        inc.mttdSeconds = Number(((inc.detectedTime - inc.startTime) / 1000).toFixed(1));
+        inc.iocsExtracted = true;
+        gameState.stats.mttdList.push(inc.mttdSeconds);
+      }
+
+      inc.currentStepIndex++;
+      gameState.networkHealth = Math.min(100, gameState.networkHealth + 8);
+
+      if (inc.currentStepIndex >= inc.scenario.steps.length) {
+        // Incident Fully Resolved!
+        const endTime = performance.now();
+        const mttrSeconds = Number(((endTime - inc.startTime) / 1000).toFixed(1));
+        const mttdSeconds = inc.mttdSeconds || Number((mttrSeconds * 0.35).toFixed(1));
+
+        // Calculate Score Bonus
+        const speedBonus = Math.max(100, Math.round(600 - mttrSeconds * 8));
+        const earnedScore = 500 + speedBonus;
+
+        gameState.stats.score += earnedScore;
+        gameState.stats.resolvedCount += 1;
+        gameState.stats.mttrList.push(mttrSeconds);
+        gameState.stats.history.unshift({
+          title: inc.scenario.title,
+          severity: inc.scenario.severity,
+          mttd: mttdSeconds,
+          mttr: mttrSeconds,
+          score: earnedScore,
+          timestamp: new Date().toLocaleTimeString('id-ID')
+        });
+
+        gameState.networkHealth = Math.min(100, gameState.networkHealth + 20);
+        const resolvedTitle = inc.scenario.title;
+        gameState.activeIncident = null;
+        gameState.waveCooldown = 8; // 8 seconds before next wave if auto-wave is ON
+
+        saveStats();
+        updateIncidentSidebarUI();
+        closeStationModal();
+        playSound('resolved');
+        showToast(`✅ INSIDEN TERMITIGASI: ${resolvedTitle}! (MTTD: ${mttdSeconds}s | MTTR: ${mttrSeconds}s | +${earnedScore} Poin)`, 'success');
+      } else {
+        saveStats();
+        updateIncidentSidebarUI();
+        playSound('step');
+        const nextStep = inc.scenario.steps[inc.currentStepIndex];
+        showToast(`${customSuccessMsg || 'Tahap selesai!'} ➔ Lanjut ke ${STATIONS[nextStep.station].name}`, 'info');
+        // Refresh current modal or close it so analyst can run to next station
+        setTimeout(() => {
+          closeStationModal();
+        }, 650);
+      }
+    }
+
+    /*************************************************************************
+     * 7. INTERACTIVE STATION TERMINAL MODALS (5 DISTINCT DASHBOARDS)
+     *************************************************************************/
+    function openNearbyStationModal() {
+      if (!gameState.nearbyStationId) {
+        showToast('Dekati salah satu meja stasiun SOC terlebih dahulu!', 'info');
+        return;
+      }
+      openStationModal(gameState.nearbyStationId);
+    }
+
+    function openStationModal(stationId) {
+      const st = STATIONS[stationId];
+      if (!st) return;
+
+      gameState.openModalStationId = stationId;
+      playSound('open');
+
+      document.getElementById('modal-station-title').textContent = `${st.code} // ${st.name}`;
+      document.getElementById('modal-station-subtitle').textContent = st.subtitle;
+
+      const bodyEl = document.getElementById('modal-station-body');
+      bodyEl.innerHTML = renderStationDashboardHTML(stationId);
+
+      const backdrop = document.getElementById('station-modal-backdrop');
+      backdrop.classList.remove('hidden');
+      backdrop.classList.add('flex');
+    }
+
+    function closeStationModal() {
+      gameState.openModalStationId = null;
+      const backdrop = document.getElementById('station-modal-backdrop');
+      backdrop.classList.add('hidden');
+      backdrop.classList.remove('flex');
+    }
+
+    function renderStationDashboardHTML(stationId) {
+      const inc = gameState.activeIncident;
+      const reqStation = getRequiredStationForCurrentStep();
+      const isCorrectStationForStep = inc && reqStation === stationId;
+
+      // Common Status Banner at Top of Modal
+      let statusBanner = '';
+      if (!inc) {
+        statusBanner = `
+          <div class="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 flex items-center justify-between">
+            <div class="text-xs text-emerald-300"><strong>Status Sistem Normal:</strong> Tidak ada insiden aktif yang membutuhkan tindakan di stasiun ini.</div>
+            <button onclick="closeStationModal(); triggerRandomScenario();" class="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold">Simulasikan Serangan</button>
+          </div>
+        `;
+      } else if (!isCorrectStationForStep) {
+        const neededSt = STATIONS[reqStation];
+        statusBanner = `
+          <div class="p-3 rounded-xl bg-amber-950/50 border border-amber-500/40 flex flex-wrap items-center justify-between gap-2">
+            <div class="text-xs text-amber-200">
+              <strong>Perhatian Playbook:</strong> Tahap saat ini membutuhkan tindakan di <strong class="text-white underline">${neededSt.name}</strong>.
+            </div>
+            <button onclick="closeStationModal(); walkToStation('${neededSt.id}', true);" class="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs">
+              🏃 Lari ke ${neededSt.code}
+            </button>
+          </div>
+        `;
+      } else {
+        const currentStepObj = inc.scenario.steps[inc.currentStepIndex];
+        statusBanner = `
+          <div class="p-3 rounded-xl bg-rose-950/60 border border-rose-500/60 flex items-center justify-between">
+            <div>
+              <div class="text-[10px] font-mono-tech uppercase text-rose-300 font-bold">INSTRUKSI PLAYBOOK AKTIF</div>
+              <div class="text-xs sm:text-sm font-bold text-white mt-0.5">${currentStepObj.label}</div>
+            </div>
+            <span class="px-2.5 py-1 rounded bg-rose-500/20 border border-rose-500/40 font-mono-tech text-xs text-rose-300">WAJIB EKSEKUSI</span>
+          </div>
+        `;
+      }
+
+      // 1) SIEM CONSOLE
+      if (stationId === 'siem') {
+        const logs = inc ? inc.scenario.siemLog : [
+          '[INFO] Syslog daemon healthy - 14,210 EPS ingested',
+          '[INFO] Kerberos TGT ticket renewal normal on DC-01',
+          '[INFO] Perimeter Firewall heartbeat OK'
+        ];
+        return `
+          ${statusBanner}
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="md:col-span-2 bg-slate-950 rounded-xl p-3.5 border border-slate-800 font-mono-tech text-xs space-y-2">
+              <div class="text-cyan-400 font-bold border-b border-slate-800 pb-1.5 flex justify-between">
+                <span>LIVE SIEM CORRELATION LOG STREAM</span>
+                <span>EPS: 14,890</span>
+              </div>
+              <div class="space-y-1.5 text-slate-300 max-h-48 overflow-y-auto">
+                ${logs.map(l => `<div class="p-2 rounded bg-slate-900/90 border-l-2 ${inc ? 'border-rose-500 text-rose-200' : 'border-cyan-500'}">${l}</div>`).join('')}
+              </div>
+            </div>
+
+            <div class="bg-slate-900/90 rounded-xl p-3.5 border border-slate-800 flex flex-col justify-between space-y-3">
+              <div>
+                <div class="text-xs font-bold uppercase text-cyan-300 mb-2">Ekstraksi IOC Otomatis</div>
+                ${
+                  inc
+                    ? `<div class="space-y-1.5 font-mono-tech text-[11px]">
+                        <div class="p-1.5 rounded bg-slate-950 border border-slate-800"><span class="text-slate-400">Target Host:</span> <strong class="text-white">${inc.scenario.iocs.host}</strong></div>
+                        <div class="p-1.5 rounded bg-slate-950 border border-slate-800"><span class="text-slate-400">Process/PID:</span> <strong class="text-amber-300">${inc.scenario.iocs.pid}</strong></div>
+                        <div class="p-1.5 rounded bg-slate-950 border border-slate-800"><span class="text-slate-400">Attacker IP:</span> <strong class="text-rose-400">${inc.scenario.iocs.ip}</strong></div>
+                        <div class="p-1.5 rounded bg-slate-950 border border-slate-800"><span class="text-slate-400">Artefak/Hash:</span> <strong class="text-purple-300">${inc.scenario.iocs.hash}</strong></div>
+                      </div>`
+                    : `<p class="text-xs text-slate-400">Tidak ada IOC berbahaya pada antrean korelasi saat ini.</p>`
+                }
+              </div>
+
+              ${
+                isCorrectStationForStep
+                  ? `<button onclick="completeCurrentPlaybookStep('Triage SIEM selesai! IOC disalin ke Catatan Analis.')" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/25 transition">
+                      ✔ TRIAGE ALERT & EKSTRAK IOC KE CATATAN
+                    </button>`
+                  : `<button disabled class="w-full py-2 px-3 rounded-xl bg-slate-800 text-slate-500 font-mono-tech text-xs cursor-not-allowed">
+                      ${inc && inc.iocsExtracted ? '✔ Triage SIEM Sudah Selesai' : 'Menunggu Alert Baru'}
+                    </button>`
+              }
+            </div>
+          </div>
+        `;
+      }
+
+      // 2) THREAT INTELLIGENCE DESK
+      if (stationId === 'ti') {
+        const targetIp = inc ? inc.scenario.iocs.ip : '91.240.118.172';
+        return `
+          ${statusBanner}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-3">
+              <div class="text-xs font-bold uppercase text-purple-300">Global Threat Intelligence Lookup</div>
+              <div class="flex gap-2 font-mono-tech text-xs">
+                <input id="ti-input" type="text" value="${targetIp}" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white" />
+              </div>
+              <div class="p-3 rounded-lg bg-slate-900/90 border border-purple-500/30 font-mono-tech text-xs space-y-1.5">
+                <div class="flex justify-between"><span class="text-slate-400">Queried Indicator:</span><span class="text-white font-bold">${targetIp}</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">Threat Score:</span><span class="text-rose-400 font-bold">98 / 100 (MALICIOUS)</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">Classification:</span><span class="text-amber-300">Botnet C2 / Brute Force Node</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">Confidence:</span><span class="text-emerald-400">High (34/36 Security Vendors)</span></div>
+              </div>
+            </div>
+
+            <div class="bg-slate-900/90 rounded-xl p-4 border border-slate-800 flex flex-col justify-between space-y-3">
+              <div>
+                <div class="text-xs font-bold uppercase text-slate-200 mb-1">Rekomendasi Analis Threat Intel</div>
+                <p class="text-xs text-slate-400 leading-relaxed">Indikator cocok dengan kampanye serangan aktif. Tandai IOC sebagai terkonfirmasi berbahaya agar kebijakan pemblokiran otomatis siap diterapkan di Firewall.</p>
+              </div>
+              ${
+                isCorrectStationForStep
+                  ? `<button onclick="completeCurrentPlaybookStep('Reputasi IOC terverifikasi di Threat Intel!')" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-600 hover:from-purple-400 hover:to-fuchsia-500 text-white font-extrabold text-xs shadow-lg shadow-purple-500/25 transition">
+                      ✔ KONFIRMASI & TAG IOC BERBAHAYA (${targetIp})
+                    </button>`
+                  : `<button disabled class="w-full py-2 px-3 rounded-xl bg-slate-800 text-slate-500 font-mono-tech text-xs cursor-not-allowed">
+                      Tidak Ada Tugas Threat Intel pada Tahap Ini
+                    </button>`
+              }
+            </div>
+          </div>
+        `;
+      }
+
+      // 3) EDR WORKSTATION
+      if (stationId === 'edr') {
+        const endpoints = ['WS-FINANCE-04', 'WS-HR-02', 'SRV-FILESHARE-01', 'DEV-LAPTOP-09'];
+        const infectedHost = inc ? inc.scenario.iocs.host : null;
+        return `
+          ${statusBanner}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-2.5">
+              <div class="text-xs font-bold uppercase text-blue-400">Daftar Endpoint Korporat (EDR Fleet)</div>
+              <div class="grid grid-cols-1 gap-2 font-mono-tech text-xs">
+                ${endpoints.map(ep => {
+                  const iscompromised = infectedHost === ep;
+                  return `
+                    <div class="p-2.5 rounded-lg border flex items-center justify-between ${iscompromised ? 'bg-rose-950/50 border-rose-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-300'}">
+                      <div>
+                        <div class="font-bold">${ep}</div>
+                        <div class="text-[10px] ${iscompromised ? 'text-rose-300' : 'text-emerald-400'}">${iscompromised ? '⚠ SUSPICIOUS PROCESS / COMPROMISED' : '● Agent Healthy'}</div>
+                      </div>
+                      <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800">${iscompromised ? inc.scenario.iocs.pid : 'Idle'}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+
+            <div class="bg-slate-900/90 rounded-xl p-4 border border-slate-800 flex flex-col justify-between space-y-3">
+              <div class="space-y-2">
+                <div class="text-xs font-bold uppercase text-blue-300">Tindakan Containment & Remediasi Endpoint</div>
+                <p class="text-xs text-slate-400">Pilih tindakan taktis EDR untuk memutus eksekusi *malware* dan mengisolasi *host* dari jaringan lokal (VLAN Quarantine):</p>
+                ${
+                  inc
+                    ? `<div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800 font-mono-tech text-xs space-y-1">
+                        <div>Target Host: <strong class="text-cyan-300">${inc.scenario.iocs.host}</strong></div>
+                        <div>Target Process: <strong class="text-amber-300">${inc.scenario.iocs.pid}</strong></div>
+                        <div>Hash Artefak: <strong class="text-purple-300">${inc.scenario.iocs.hash}</strong></div>
+                      </div>`
+                    : ''
+                }
+              </div>
+
+              ${
+                isCorrectStationForStep
+                  ? `<div class="space-y-2">
+                      <button onclick="completeCurrentPlaybookStep('Endpoint berhasil diisolasi & proses berbahaya dimatikan via EDR!')" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-400 hover:to-cyan-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-blue-500/25 transition">
+                        ⚡ ISOLASI HOST (${inc.scenario.iocs.host}) & TERMINATE PID / HASH
+                      </button>
+                    </div>`
+                  : `<button disabled class="w-full py-2 px-3 rounded-xl bg-slate-800 text-slate-500 font-mono-tech text-xs cursor-not-allowed">
+                      Tidak Ada Tugas EDR pada Tahap Ini
+                    </button>`
+              }
+            </div>
+          </div>
+        `;
+      }
+
+      // 4) FIREWALL & NETWORK NAC
+      if (stationId === 'fw') {
+        const targetIp = inc ? inc.scenario.iocs.ip : '0.0.0.0';
+        const targetPort = inc ? inc.scenario.iocs.port : '443';
+        return `
+          ${statusBanner}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-3 font-mono-tech text-xs">
+              <div class="text-orange-400 font-bold uppercase">Zero-Trust Perimeter Firewall & WAF</div>
+              <div class="space-y-2">
+                <div>
+                  <label class="text-[10px] text-slate-400 uppercase">Target IP Address (Dari Catatan IOC):</label>
+                  <input type="text" value="${targetIp}" readonly class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-rose-300 font-bold" />
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-400 uppercase">Target Port / Protocol:</label>
+                  <input type="text" value="${targetPort}" readonly class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-amber-300" />
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-slate-900/90 rounded-xl p-4 border border-slate-800 flex flex-col justify-between space-y-3">
+              <div>
+                <div class="text-xs font-bold uppercase text-orange-300 mb-1">Mitigasi Jaringan & Pemblokiran Trafik</div>
+                <p class="text-xs text-slate-400 leading-relaxed">Terapkan aturan ` + '`DROP / DENY`' + ` pada tabel *routing* Firewall, aktifkan *Adaptive Rate Limiting*, atau nyalakan *WAF SQLi Virtual Patch* untuk memutus jalur komando penyerang.</p>
+              </div>
+              ${
+                isCorrectStationForStep
+                  ? `<button onclick="completeCurrentPlaybookStep('Aturan Firewall & Pemblokiran IP berhasil diterapkan!')" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-rose-600 hover:from-orange-400 hover:to-rose-500 text-white font-extrabold text-xs shadow-lg shadow-orange-500/25 transition">
+                      🛡️ BLOCK IP ${targetIp} & ENFORCE FIREWALL POLICY
+                    </button>`
+                  : `<button disabled class="w-full py-2 px-3 rounded-xl bg-slate-800 text-slate-500 font-mono-tech text-xs cursor-not-allowed">
+                      Tidak Ada Tugas Firewall pada Tahap Ini
+                    </button>`
+              }
+            </div>
+          </div>
+        `;
+      }
+
+      // 5) CORE SERVER RACK
+      if (stationId === 'srv') {
+        const targetSrv = inc ? inc.scenario.iocs.host : 'SRV-FILESHARE-01';
+        return `
+          ${statusBanner}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-2.5 font-mono-tech text-xs">
+              <div class="text-emerald-400 font-bold uppercase">Status Cluster Server & Immutable Snapshot</div>
+              <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex justify-between">
+                <span>Cluster Node:</span><span class="text-cyan-300 font-bold">${targetSrv}</span>
+              </div>
+              <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex justify-between">
+                <span>Snapshot Backup Terakhir:</span><span class="text-emerald-400 font-bold">Tersedia (Clean ZFS Snapshot)</span>
+              </div>
+              <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex justify-between">
+                <span>Status Patch Keamanan:</span><span class="text-amber-300 font-bold">Hotfix Ready to Deploy</span>
+              </div>
+            </div>
+
+            <div class="bg-slate-900/90 rounded-xl p-4 border border-slate-800 flex flex-col justify-between space-y-3">
+              <div>
+                <div class="text-xs font-bold uppercase text-emerald-300 mb-1">Pemulihan Infrastruktur & Patching</div>
+                <p class="text-xs text-slate-400 leading-relaxed">Pulihkan partisi yang terdampak dari *Immutable Snapshot*, pasang *Hotfix Patch* pada celah kerentanan layanan (SMB / Database), dan rotasi kunci kredensial layanan.</p>
+              </div>
+              ${
+                isCorrectStationForStep
+                  ? `<button onclick="completeCurrentPlaybookStep('Server berhasil dipulihkan dari Snapshot & celah kerentanan telah di-patch!')" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-emerald-500/25 transition">
+                      🔧 RESTORE IMMUTABLE SNAPSHOT & DEPLOY SECURITY PATCH
+                    </button>`
+                  : `<button disabled class="w-full py-2 px-3 rounded-xl bg-slate-800 text-slate-500 font-mono-tech text-xs cursor-not-allowed">
+                      Tidak Ada Tugas Server Rack pada Tahap Ini
+                    </button>`
+              }
+            </div>
+          </div>
+        `;
+      }
+
+      return '';
+    }
+
+    function executeCliCommand() {
+      const inputEl = document.getElementById('cli-input');
+      if (!inputEl) return;
+      const raw = inputEl.value.trim().toLowerCase();
+      inputEl.value = '';
+      if (!raw) return;
+
+      const reqStation = getRequiredStationForCurrentStep();
+      const isCorrect = gameState.activeIncident && reqStation === gameState.openModalStationId;
+
+      if (raw === 'help') {
+        showToast('Perintah CLI: triage, lookup, isolate, kill, block, patch, restore, exit', 'info');
+        return;
+      }
+      if (raw === 'exit' || raw === 'quit') {
+        closeStationModal();
+        return;
+      }
+
+      if (isCorrect) {
+        completeCurrentPlaybookStep(`Perintah CLI "${raw}" berhasil dieksekusi!`);
+      } else {
+        playSound('error');
+        showToast(`Perintah "${raw}" ditolak: Pastikan Anda berada di stasiun yang sesuai dengan urutan Playbook!`, 'danger');
+      }
+    }
+
+    /*************************************************************************
+     * 8. SCOREBOARD, HELP MODALS & TOAST NOTIFICATIONS
+     *************************************************************************/
+    function openScoreboardModal() {
+      renderScoreboardData();
+      const m = document.getElementById('scoreboard-modal');
+      m.classList.remove('hidden');
+      m.classList.add('flex');
+    }
+
+    function closeScoreboardModal() {
+      const m = document.getElementById('scoreboard-modal');
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    }
+
+    function renderScoreboardData() {
+      const { score, resolvedCount, mttdList, mttrList, history } = gameState.stats;
+      document.getElementById('stat-total-score').textContent = score.toLocaleString('id-ID');
+      document.getElementById('stat-resolved-count').textContent = resolvedCount;
+
+      document.getElementById('stat-best-mttd').textContent =
+        mttdList.length > 0 ? `${Math.min(...mttdList).toFixed(1)}s` : '--';
+      document.getElementById('stat-best-mttr').textContent =
+        mttrList.length > 0 ? `${Math.min(...mttrList).toFixed(1)}s` : '--';
+
+      const histEl = document.getElementById('incident-history-list');
+      if (history.length === 0) {
+        histEl.innerHTML = `<div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 text-center">Belum ada insiden yang diselesaikan pada sesi ini.</div>`;
+      } else {
+        histEl.innerHTML = history
+          .map(
+            (item) => `
+          <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div>
+              <div class="font-bold text-white">${item.title}</div>
+              <div class="text-[10px] font-mono-tech text-slate-400">Waktu: ${item.timestamp} &bull; Severity: ${item.severity}</div>
+            </div>
+            <div class="flex items-center gap-3 font-mono-tech">
+              <span class="text-cyan-300">MTTD: ${item.mttd}s</span>
+              <span class="text-purple-300">MTTR: ${item.mttr}s</span>
+              <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">+${item.score}</span>
+            </div>
+          </div>
+        `
+          )
+          .join('');
+      }
+    }
+
+    function openHelpModal() {
+      const m = document.getElementById('help-modal');
+      m.classList.remove('hidden');
+      m.classList.add('flex');
+    }
+
+    function closeHelpModal() {
+      const m = document.getElementById('help-modal');
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const el = document.createElement('div');
+
+      const colorClasses =
+        type === 'danger'
+          ? 'bg-rose-950/95 border-rose-500 text-rose-100 shadow-rose-500/30'
+          : type === 'success'
+          ? 'bg-emerald-950/95 border-emerald-400 text-emerald-100 shadow-emerald-500/30'
+          : 'bg-slate-900/95 border-cyan-400 text-cyan-100 shadow-cyan-500/20';
+
+      el.className = `px-4 py-2.5 rounded-xl border text-xs font-semibold shadow-lg transition-all duration-300 ${colorClasses}`;
+      el.textContent = message;
+      container.appendChild(el);
+
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-8px)';
+        setTimeout(() => el.remove(), 300);
+      }, 3600);
+    }
+
+    /*************************************************************************
+     * 9. MAIN ANIMATION & SIMULATION LOOP
+     *************************************************************************/
+    let lastSecondTick = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const dt = Math.min(clock.getDelta(), 0.1);
+      const elapsed = clock.getElapsedTime();
+
+      // Rotate central hologram globe
+      if (coreHologramMesh) {
+        coreHologramMesh.rotation.y = elapsed * 0.45;
+        coreHologramMesh.rotation.x = Math.sin(elapsed * 0.3) * 0.2;
+      }
+
+      updatePlayerAndCamera(dt, elapsed);
+      updateStationVisualsAndLabels(elapsed);
+
+      // Once-per-second simulation tick (Timers, Health Drain, Auto-Wave)
+      if (elapsed - lastSecondTick >= 1.0) {
+        lastSecondTick = elapsed;
+
+        if (gameState.activeIncident) {
+          const sec = Math.floor((performance.now() - gameState.activeIncident.startTime) / 1000);
+          const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+          const ss = String(sec % 60).padStart(2, '0');
+          document.getElementById('incident-timer').textContent = `${mm}:${ss}`;
+
+          // Drain network integrity slowly while incident is active
+          gameState.networkHealth = Math.max(5, Number((gameState.networkHealth - 0.6).toFixed(1)));
+        } else {
+          // Slowly recover health when secure
+          if (gameState.networkHealth < 100) {
+            gameState.networkHealth = Math.min(100, Number((gameState.networkHealth + 0.5).toFixed(1)));
+          }
+          // Auto-Wave countdown
+          if (gameState.waveMode) {
+            if (gameState.waveCooldown > 0) {
+              gameState.waveCooldown--;
+            } else {
+              triggerRandomScenario();
+            }
+          }
+        }
+
+        // Update Network Health Bar UI
+        const hVal = Math.round(gameState.networkHealth);
+        const hBar = document.getElementById('health-bar');
+        const hText = document.getElementById('health-value');
+        hBar.style.width = `${hVal}%`;
+        hText.textContent = `${hVal}%`;
+
+        if (hVal > 65) {
+          hBar.className = 'h-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-300';
+          hText.className = 'font-mono-tech font-bold text-emerald-400';
+        } else if (hVal > 35) {
+          hBar.className = 'h-full bg-gradient-to-r from-amber-500 to-orange-400 transition-all duration-300';
+          hText.className = 'font-mono-tech font-bold text-amber-400';
+        } else {
+          hBar.className = 'h-full bg-gradient-to-r from-rose-600 to-red-400 transition-all duration-300';
+          hText.className = 'font-mono-tech font-bold text-rose-400';
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    window.onload = function () {
+      loadStats();
+      initThreeJS();
+      updateIncidentSidebarUI();
+      animate();
+    };
+  </script>
+</body>
+</html>
